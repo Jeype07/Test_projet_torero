@@ -44,7 +44,7 @@ TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
-DMA_HandleTypeDef hdma_usart3_tx;
+DMA_HandleTypeDef hdma_usart3_rx;
 
 /* USER CODE BEGIN PV */
 LIDAR_HandleTypeDef_t hlidar;
@@ -121,15 +121,17 @@ int main(void)
 
 
   LIDAR_Init(&hlidar);
-    HAL_Delay(500);
-    LIDAR_Stop(&hlidar);
-    HAL_Delay(500);
+  printf("Init\r\n");
+  HAL_Delay(2000);
+  /*
     LIDAR_Get_Health_Status(&hlidar);
     print_buffer("Health", hlidar.health_buff, HEALTH_BUFF_SIZE_LIDAR, HEALTH_BUFF_SIZE_LIDAR);
-    HAL_Delay(500);
+    HAL_Delay(1000);
     LIDAR_Get_Info(&hlidar);
-    print_buffer("Info", hlidar.info_buff, INFO_BUFF_SIZE_LIDAR, INFO_BUFF_SIZE_LIDAR);
-    LIDAR_Start(&hlidar);
+    print_buffer("Info", hlidar.info_buff, INFO_BUFF_SIZE_LIDAR, INFO_BUFF_SIZE_LIDAR);*/
+    HAL_StatusTypeDef status = LIDAR_Start(&hlidar);
+    printf("status = %d\r\n", status);
+    //HAL_Delay(100);
 
   /* USER CODE END 2 */
 
@@ -137,12 +139,15 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+	  print_buffer("DATA", hlidar.data_buff, DATA_BUFF_SIZE_LIDAR, 15);
 	  LIDAR_get_point(&hlidar);
 	  LIDAR_process_frame(&hlidar);
-	  print_buffer("POINT", hlidar.process_frame.point_buff, POINT_BUFF_SIZE_LIDAR, 50);
-	  LIDAR_median_filter(&hlidar);
-	  print_buffer("FILTERED", hlidar.process_frame.filtered_buff, POINT_BUFF_SIZE_LIDAR, 50);
-	  HAL_Delay(1);
+	  //print_buffer("POINT", hlidar.process_frame.point_buff, POINT_BUFF_SIZE_LIDAR, 20);
+	  //LIDAR_median_filter(&hlidar);
+	  //print_buffer("FILTERED", hlidar.process_frame.filtered_buff, POINT_BUFF_SIZE_LIDAR, 20);
+	  HAL_Delay(5);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -385,24 +390,19 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LD2_Pin|DEV_EN_LIDAR_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(M_EN_LIDAR_GPIO_Port, M_EN_LIDAR_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(DEV_EN_LIDAR_GPIO_Port, DEV_EN_LIDAR_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LPUART1_RX_Pin */
-  GPIO_InitStruct.Pin = LPUART1_RX_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF12_LPUART1;
-  HAL_GPIO_Init(LPUART1_RX_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD2_Pin DEV_EN_LIDAR_Pin */
   GPIO_InitStruct.Pin = LD2_Pin|DEV_EN_LIDAR_Pin;

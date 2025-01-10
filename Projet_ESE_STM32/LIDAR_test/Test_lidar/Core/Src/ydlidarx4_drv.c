@@ -37,6 +37,7 @@ HAL_StatusTypeDef LIDAR_Start(LIDAR_HandleTypeDef_t * hlidar){
 	HAL_StatusTypeDef status = HAL_UART_Transmit(hlidar->huart, lidar_command, 2, 2000);
 	if(status == HAL_OK){
 		HAL_UART_Receive_DMA(hlidar->huart, hlidar->data_buff, DATA_BUFF_SIZE_LIDAR);
+		printf("Receive OK\r\n");
 		return status;
 	}
 	else{
@@ -123,11 +124,11 @@ HAL_StatusTypeDef LIDAR_Get_Health_Status(LIDAR_HandleTypeDef_t * hlidar){
 		return status;
 	}
 }
-
+/*
 /*
  * @brief
  * @param
- */
+ *
 void LIDAR_process_frame(LIDAR_HandleTypeDef_t * hlidar) {
     uint16_t Si;
     float Di;
@@ -157,7 +158,7 @@ void LIDAR_process_frame(LIDAR_HandleTypeDef_t * hlidar) {
         index = (int)round(Ai);
 
         // Filtrage des points trop proches ou trop loin
-        if (Di > 1500 || Di < 40) {
+        if (Di > 1000 || Di < 40) {
             hlidar->process_frame.point_buff[index] = 0;
         } else {
             hlidar->process_frame.point_buff[index] = (int)Di;
@@ -169,7 +170,7 @@ void LIDAR_process_frame(LIDAR_HandleTypeDef_t * hlidar) {
 /*
  * @brief
  * @param
- */
+ *
 void LIDAR_get_point(LIDAR_HandleTypeDef_t *hlidar) {
 
 
@@ -245,6 +246,175 @@ void LIDAR_get_point(LIDAR_HandleTypeDef_t *hlidar) {
     frame_end = frame_end - DATA_BUFF_SIZE_LIDAR;
 }
 
+
+void LIDAR_process_frame(LIDAR_HandleTypeDef_t *hlidar) {
+    uint16_t Si;
+    float Di, Ai;
+    float AngleFSA = ((float)(hlidar->process_frame.FSA >> 1)) / 64.0; // Angle de départ
+    float AngleLSA = ((float)(hlidar->process_frame.LSA >> 1)) / 64.0; // Angle de fin
+    float diffAngle = AngleLSA - AngleFSA;
+
+    if (diffAngle < 0) {
+        diffAngle += 360.0; // Gérer le dépassement des 360°
+    }
+
+    int LSN = hlidar->process_frame.LSN; // Nombre d'échantillons
+    for (int i = 0; i < LSN; i++) {
+        // Extraire les données de distance
+        Si = hlidar->process_frame.frame_buff[2 * i] | (hlidar->process_frame.frame_buff[2 * i + 1] << 8);
+        Di = Si / 4.0; // Conversion en mm
+
+        // Calcul de l'angle sans correction
+        Ai = (diffAngle / (LSN - 1)) * i + AngleFSA;
+        if (Ai > 360.0) {
+            Ai -= 360.0; // Normaliser l'angle à 0-360°
+        }
+
+        // Correction de l'angle
+        float AngCorrect = 0.0;
+        if (Di != 0) {
+            AngCorrect = atan(21.8 * (155.3 - Di) / (155.3 * Di)) * (180.0 / 3.141592653589793);
+        }
+        Ai += AngCorrect;
+
+        if (Ai < 0) {
+            Ai += 360.0;
+        } else if (Ai >= 360.0) {
+            Ai -= 360.0;
+        }
+
+        // Index dans le buffer circulaire
+        int index = (int)round(Ai);
+
+        // Filtrage des distances
+        if (Di > 1000 || Di < 40) {
+            hlidar->process_frame.point_buff[index] = 0;
+        } else {
+            hlidar->process_frame.point_buff[index] = (int)Di;
+        }
+    }
+}
+
+void LIDAR_get_point(LIDAR_HandleTypeDef_t *hlidar) {
+    int i = 0;
+    while (i < DATA_BUFF_SIZE_LIDAR) {
+        if (hlidar->data_buff[i] == 0xA5 && hlidar->data_buff[i + 1] == 0x5A) {
+            // Début de la trame détecté
+            hlidar->process_frame.PH = (hlidar->data_buff[i + 1] << 8) | hlidar->data_buff[i];
+            hlidar->process_frame.CT = hlidar->data_buff[i + 2];
+            hlidar->process_frame.LSN = hlidar->data_buff[i + 3];
+            hlidar->process_frame.FSA = (hlidar->data_buff[i + 5] << 8) | hlidar->data_buff[i + 4];
+            hlidar->process_frame.LSA = (hlidar->data_buff[i + 7] << 8) | hlidar->data_buff[i + 6];
+            hlidar->process_frame.CS = (hlidar->data_buff[i + 9] << 8) | hlidar->data_buff[i + 8];
+
+            // Vérification du checksum
+            uint16_t checksum = 0;
+            for (int j = 0; j < (10 + 2 * hlidar->process_frame.LSN); j++) {
+                checksum ^= hlidar->data_buff[i + j];
+            }
+
+            if (checksum == hlidar->process_frame.CS) {
+                // Copie des données de l'échantillon
+                for (int k = 0; k < 2 * hlidar->process_frame.LSN; k++) {
+                    hlidar->process_frame.frame_buff[k] = hlidar->data_buff[i + 10 + k];
+                }
+
+                // Traiter la trame
+                LIDAR_process_frame(hlidar);
+            }
+
+            // Avancer l'index après la trame
+            i += 10 + 2 * hlidar->process_frame.LSN;
+        } else {
+            i++;
+        }
+    }
+}
+*/
+
+void LIDAR_process_frame(LIDAR_HandleTypeDef_t *hlidar) {
+    uint16_t Si;
+    float Di, Ai;
+    float AngleFSA = ((float)(hlidar->process_frame.FSA >> 1)) / 64.0; // Angle de départ
+    float AngleLSA = ((float)(hlidar->process_frame.LSA >> 1)) / 64.0; // Angle de fin
+    float diffAngle = AngleLSA - AngleFSA;
+
+    if (diffAngle < 0) {
+        diffAngle += 360.0; // Gérer le dépassement des 360°
+    }
+
+    int LSN = hlidar->process_frame.LSN; // Nombre d'échantillons
+    for (int i = 0; i < LSN; i++) {
+        // Extraire les données de distance
+        Si = hlidar->process_frame.frame_buff[2 * i] | (hlidar->process_frame.frame_buff[2 * i + 1] << 8);
+        Di = Si / 4.0; // Conversion en mm
+
+        // Calcul de l'angle sans correction
+        Ai = (diffAngle / (LSN - 1)) * i + AngleFSA;
+        if (Ai > 360.0) {
+            Ai -= 360.0; // Normaliser l'angle à 0-360°
+        }
+
+        // Correction de l'angle
+        float AngCorrect = 0.0;
+        if (Di != 0) {
+            AngCorrect = atan(21.8 * (155.3 - Di) / (155.3 * Di)) * (180.0 / 3.141592653589793);
+        }
+        Ai += AngCorrect;
+
+        if (Ai < 0) {
+            Ai += 360.0;
+        } else if (Ai >= 360.0) {
+            Ai -= 360.0;
+        }
+
+        // Index dans le buffer circulaire
+        int index = (int)round(Ai);
+
+        // Filtrage des distances
+        if (Di > 1000 || Di < 40) {
+            hlidar->process_frame.point_buff[index] = 0;
+        } else {
+            hlidar->process_frame.point_buff[index] = (int)Di;
+        }
+    }
+}
+
+void LIDAR_get_point(LIDAR_HandleTypeDef_t *hlidar) {
+    int i = 0;
+    while (i < DATA_BUFF_SIZE_LIDAR) {
+        if (hlidar->data_buff[i] == 0xA5 && hlidar->data_buff[i + 1] == 0x5A) {
+            // Début de la trame détecté
+            hlidar->process_frame.PH = (hlidar->data_buff[i + 1] << 8) | hlidar->data_buff[i];
+            hlidar->process_frame.CT = hlidar->data_buff[i + 2];
+            hlidar->process_frame.LSN = hlidar->data_buff[i + 3];
+            hlidar->process_frame.FSA = (hlidar->data_buff[i + 5] << 8) | hlidar->data_buff[i + 4];
+            hlidar->process_frame.LSA = (hlidar->data_buff[i + 7] << 8) | hlidar->data_buff[i + 6];
+            hlidar->process_frame.CS = (hlidar->data_buff[i + 9] << 8) | hlidar->data_buff[i + 8];
+
+            // Vérification du checksum
+            uint16_t checksum = 0;
+            for (int j = 0; j < (10 + 2 * hlidar->process_frame.LSN); j++) {
+                checksum ^= hlidar->data_buff[i + j];
+            }
+
+            if (checksum == hlidar->process_frame.CS) {
+                // Copie des données de l'échantillon
+                for (int k = 0; k < 2 * hlidar->process_frame.LSN; k++) {
+                    hlidar->process_frame.frame_buff[k] = hlidar->data_buff[i + 10 + k];
+                }
+
+                // Traiter la trame
+                LIDAR_process_frame(hlidar);
+            }
+
+            // Avancer l'index après la trame
+            i += 10 + 2 * hlidar->process_frame.LSN;
+        } else {
+            i++;
+        }
+    }
+}
 
 /*
  * @brief Filter point buff using a median filter to eliminate the aberrant values due
@@ -372,11 +542,7 @@ int LIDAR_Calculate_Average_Distance(int *distances, int start_index, int end_in
     }
     return sum / count;
 }
-/*
- * ydlidarx4_drv.c
- *
- *  Created on: Jan 9, 2025
- *      Author: jeanp
- */
+
+
 
 
